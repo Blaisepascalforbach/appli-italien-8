@@ -1,0 +1,2173 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sport e Parità - Apprendimento Interattivo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .video-wrapper {
+            position: relative;
+            padding-bottom: 56.25%; /* 16:9 ratio */
+            height: 0;
+            overflow: hidden;
+            border-radius: 1rem;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+        }
+        .video-wrapper iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        .video-ring {
+            position: absolute;
+            inset: 0;
+            border-radius: 1rem;
+            pointer-events: none;
+            z-index: 12;
+        }
+        @keyframes ringPulse {
+            0% { box-shadow: 0 0 0 0 rgba(79, 70, 229, 0); }
+            35% { box-shadow: 0 0 0 10px rgba(79, 70, 229, 0.18); }
+            70% { box-shadow: 0 0 0 6px rgba(79, 70, 229, 0.12); }
+            100% { box-shadow: 0 0 0 0 rgba(79, 70, 229, 0); }
+        }
+        .video-wrapper.video-ring-on .video-ring {
+            animation: ringPulse 900ms ease-out;
+        }
+
+        /* Pausa guidata: pannello flottante (niente scroll tra video e domande) */
+        #pausePanel.pause-float {
+            position: fixed;
+            z-index: 45;
+            margin: 0;
+            right: 12px;
+            top: 12px;
+            bottom: 12px;
+            width: clamp(320px, 35vw, 520px);
+            max-height: calc(100vh - 24px);
+            overflow: auto;
+            overscroll-behavior: contain;
+        }
+        @media (max-width: 1023px) {
+            #pausePanel.pause-float {
+                left: 12px;
+                right: 12px;
+                top: auto;
+                bottom: 12px;
+                width: auto;
+                max-height: 72vh;
+            }
+        }
+        #pausePanel.pause-float #pauseActions {
+            position: sticky;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.96);
+            border-top: 1px solid rgba(226, 232, 240, 1);
+            padding-top: 12px;
+            margin-top: 16px;
+        }
+        .video-captions {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 10px;
+            z-index: 15;
+            pointer-events: none;
+            padding: 0 12px 12px;
+            display: flex;
+            justify-content: center;
+        }
+        .video-captions-inner {
+            width: 100%;
+            max-width: 860px;
+            background: rgba(15, 23, 42, 0.82); /* slate-900 */
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            color: #e2e8f0; /* slate-200 */
+            border-radius: 18px;
+            padding: 10px 12px;
+            box-shadow: 0 14px 34px rgba(0, 0, 0, 0.22);
+            text-align: center;
+            white-space: pre-line;
+            line-height: 1.35;
+            font-size: 14px;
+        }
+        @media (max-width: 480px) {
+            .video-captions-inner { font-size: 13px; }
+        }
+        .video-bubble {
+            position: absolute;
+            left: 12px;
+            right: 12px;
+            top: 12px;
+            z-index: 20;
+            pointer-events: none;
+            background: rgba(15, 23, 42, 0.88); /* slate-900 */
+            backdrop-filter: blur(6px);
+            border: 1px solid rgba(148, 163, 184, 0.45); /* slate-400 */
+            color: #e2e8f0; /* slate-200 */
+            border-radius: 16px;
+            padding: 10px 12px;
+            box-shadow: 0 14px 34px rgba(0, 0, 0, 0.22);
+            white-space: pre-line;
+        }
+        @media (min-width: 640px) {
+            .video-bubble {
+                right: auto;
+                max-width: 560px;
+            }
+        }
+
+        /* Info-bulle / Tooltip (hover + focus) */
+        .tooltip {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+        }
+        .tooltip-btn {
+            width: 22px;
+            height: 22px;
+            border-radius: 9999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 900;
+            line-height: 1;
+            color: #1d4ed8; /* indigo-ish */
+            background: #e8f0fe;
+            border: 1px solid #d2e3fc;
+            cursor: help;
+            user-select: none;
+        }
+        .tooltip-content {
+            position: absolute;
+            left: 50%;
+            bottom: calc(100% + 8px);
+            transform: translateX(-50%) translateY(6px);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.15s ease, transform 0.15s ease;
+            width: 280px;
+            max-width: 85vw;
+            background: #0f172a; /* slate-900 */
+            color: #e2e8f0; /* slate-200 */
+            padding: 10px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.22);
+            z-index: 50;
+        }
+        .tooltip-content::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            border-width: 7px 7px 0 7px;
+            border-style: solid;
+            border-color: #0f172a transparent transparent transparent;
+        }
+        .tooltip:focus-within .tooltip-content,
+        .tooltip:hover .tooltip-content {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes attentionBounce {
+            0% { transform: translateY(0); }
+            35% { transform: translateY(-10px); }
+            70% { transform: translateY(2px); }
+            100% { transform: translateY(0); }
+        }
+        @keyframes attentionWiggle {
+            0% { transform: scale(1); }
+            35% { transform: scale(1.04); }
+            70% { transform: scale(0.99); }
+            100% { transform: scale(1); }
+        }
+        .attention-bounce { animation: attentionBounce 650ms cubic-bezier(0.2, 0.9, 0.2, 1); }
+        .attention-wiggle { animation: attentionWiggle 450ms ease-out; }
+
+        @media (prefers-reduced-motion: reduce) {
+            .attention-bounce,
+            .attention-wiggle {
+                animation: none !important;
+            }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800 font-sans">
+
+    <div class="max-w-7xl mx-auto px-4 py-6 md:py-10">
+        <!-- Header -->
+        <header class="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-slate-200 pb-6">
+            <div>
+                <nav class="text-sm text-indigo-600 font-bold mb-2 tracking-wide uppercase">Percorso Multimodale B1/B2</nav>
+                <h1 class="text-4xl font-black text-slate-900 tracking-tight">Le donne e lo sport italiano</h1>
+                <p class="text-slate-500 mt-2 text-lg">Analisi critica e storica della parità di genere nell'agonismo.</p>
+            </div>
+            <div class="flex items-center gap-3 bg-white shadow-sm border border-slate-200 px-6 py-3 rounded-2xl">
+                <div class="bg-indigo-100 p-2 rounded-lg text-indigo-600">
+                    <i class="fas fa-trophy"></i>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-400 font-bold uppercase">Punteggio</div>
+                    <div id="scoreDisplay" class="text-xl font-black text-slate-900">0</div>
+                </div>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            <!-- Area Video e Risorse (8 col) -->
+            <div class="lg:col-span-7 xl:col-span-8 space-y-8">
+                
+                <!-- Player Video -->
+                <section class="space-y-4 lg:sticky lg:top-6">
+                    <div class="flex items-center justify-between">
+                        <h2 class="text-xl font-bold flex items-center gap-2">
+                            <span class="bg-indigo-600 text-white w-8 h-8 rounded-lg flex items-center justify-center text-sm">1</span>
+                            Guarda il video della Rai
+                        </h2>
+                        <span class="text-xs font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded">DURATA: 01:53</span>
+                    </div>
+                    
+	                    <div class="video-wrapper bg-black">
+	                        <!-- Video YouTube integrato. Nota: funziona correttamente se la pagina e' servita via HTTP/HTTPS (localhost, GitHub Pages...). -->
+	                        <iframe
+	                            id="video-player"
+	                            loading="lazy"
+	                            referrerpolicy="strict-origin-when-cross-origin"
+	                            src="https://www.youtube.com/embed/0FvCaouS4l4?rel=0&modestbranding=1&enablejsapi=1"
+	                            title="Le donne nello sport italiano"
+	                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+	                            allowfullscreen>
+	                        </iframe>
+	                        <!-- Richiamo visivo non invasivo (bordo pulsante): appare quando la tappa si ferma -->
+	                        <div class="video-ring" aria-hidden="true"></div>
+	                        <!-- Trascrizione (sottotitoli) nella video: attivabile a richiesta -->
+	                        <div id="videoCaptions" class="video-captions hidden" aria-live="polite">
+	                            <div id="videoCaptionsText" class="video-captions-inner"></div>
+	                        </div>
+	                        <!-- Info-bulle "dans la vidéo" (si attiva durante una tappa) -->
+                        <div id="videoBubble" class="video-bubble hidden">
+                            <span id="videoBubbleText"></span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Glossario Dinamico -->
+                <section class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+                    <h3 class="text-lg font-bold mb-5 flex items-center gap-2 text-slate-700">
+                        <i class="fas fa-book-open text-indigo-500"></i> Lessico fondamentale
+                    </h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                        <div class="group p-4 bg-slate-50 rounded-2xl hover:bg-indigo-50 transition-colors border border-transparent hover:border-indigo-100">
+                            <div class="font-bold text-indigo-900 mb-1">Agonismo</div>
+                            <div class="text-xs text-slate-500 italic">Compétition sportive de haut niveau.</div>
+                        </div>
+                        <div class="group p-4 bg-slate-50 rounded-2xl hover:bg-indigo-50 transition-colors border border-transparent hover:border-indigo-100">
+                            <div class="font-bold text-indigo-900 mb-1">Parità</div>
+                            <div class="text-xs text-slate-500 italic">Égalité des droits et des chances.</div>
+                        </div>
+                        <div class="group p-4 bg-slate-50 rounded-2xl hover:bg-indigo-50 transition-colors border border-transparent hover:border-indigo-100">
+                            <div class="font-bold text-indigo-900 mb-1">Dilettanti</div>
+                            <div class="text-xs text-slate-500 italic">Amateurs (statut sans contrat pro).</div>
+                        </div>
+                        <div class="group p-4 bg-slate-50 rounded-2xl hover:bg-indigo-50 transition-colors border border-transparent hover:border-indigo-100">
+                            <div class="font-bold text-indigo-900 mb-1">Tutele</div>
+                            <div class="text-xs text-slate-500 italic">Garanties de protection sociale.</div>
+                        </div>
+                        <div class="group p-4 bg-slate-50 rounded-2xl hover:bg-indigo-50 transition-colors border border-transparent hover:border-indigo-100">
+                            <div class="font-bold text-indigo-900 mb-1">Sradicare</div>
+                            <div class="text-xs text-slate-500 italic">Déraciner / Supprimer totalement.</div>
+                        </div>
+                        <div class="group p-4 bg-slate-50 rounded-2xl hover:bg-indigo-50 transition-colors border border-transparent hover:border-indigo-100">
+                            <div class="font-bold text-indigo-900 mb-1">Impegno</div>
+                            <div class="text-xs text-slate-500 italic">L'engagement / L'effort soutenu.</div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Attività e Quiz (4 col) -->
+            <div class="lg:col-span-5 xl:col-span-4 space-y-8">
+                
+                <!-- Rappresentazioni mentali (prima della visione) -->
+                <section class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+                    <h3 class="text-lg font-bold mb-2 flex items-center gap-2">
+                        <i class="fas fa-lightbulb text-amber-500"></i> Prima del video: 3 idee da verificare
+                    </h3>
+                    <p class="text-sm text-slate-500 mb-5">Scegli <strong>Vero</strong> o <strong>Falso</strong>. Poi leggi la spiegazione (serve per “resettare” gli stereotipi).</p>
+
+                    <div class="space-y-4">
+                        <div class="p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                            <div class="flex items-start justify-between gap-3">
+                                <p class="text-sm font-bold text-slate-800">1) “Dilettante = senza talento.”</p>
+                                <span class="tooltip">
+                                    <button type="button" class="tooltip-btn" aria-label="Info">i</button>
+                                    <span class="tooltip-content" role="tooltip">Attenzione: “dilettante” (qui) parla di contratto e tutele, non di bravura.</span>
+                                </span>
+                            </div>
+                            <div class="mt-3 flex gap-2">
+                                <button type="button" class="flex-1 py-2 rounded-xl border border-slate-200 bg-white hover:border-indigo-400 hover:shadow-sm transition font-bold text-sm" onclick="answerBelief('belief1', true)">Vero</button>
+                                <button type="button" class="flex-1 py-2 rounded-xl border border-slate-200 bg-white hover:border-indigo-400 hover:shadow-sm transition font-bold text-sm" onclick="answerBelief('belief1', false)">Falso</button>
+                            </div>
+                            <div id="belief1" class="hidden mt-3 text-sm p-3 rounded-xl border"></div>
+                        </div>
+
+                        <div class="p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                            <div class="flex items-start justify-between gap-3">
+                                <p class="text-sm font-bold text-slate-800">2) “Parità = stesse opportunità e tutele.”</p>
+                                <span class="tooltip">
+                                    <button type="button" class="tooltip-btn" aria-label="Info">i</button>
+                                    <span class="tooltip-content" role="tooltip">Parità non vuol dire “tutti uguali”: vuol dire diritti, protezioni e possibilità comparabili.</span>
+                                </span>
+                            </div>
+                            <div class="mt-3 flex gap-2">
+                                <button type="button" class="flex-1 py-2 rounded-xl border border-slate-200 bg-white hover:border-indigo-400 hover:shadow-sm transition font-bold text-sm" onclick="answerBelief('belief2', true)">Vero</button>
+                                <button type="button" class="flex-1 py-2 rounded-xl border border-slate-200 bg-white hover:border-indigo-400 hover:shadow-sm transition font-bold text-sm" onclick="answerBelief('belief2', false)">Falso</button>
+                            </div>
+                            <div id="belief2" class="hidden mt-3 text-sm p-3 rounded-xl border"></div>
+                        </div>
+
+                        <div class="p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                            <div class="flex items-start justify-between gap-3">
+                                <p class="text-sm font-bold text-slate-800">3) “Se una donna vince, allora la parità è già raggiunta.”</p>
+                                <span class="tooltip">
+                                    <button type="button" class="tooltip-btn" aria-label="Info">i</button>
+                                    <span class="tooltip-content" role="tooltip">Un successo individuale non cancella automaticamente differenze di contratti, visibilità, tutele e risorse.</span>
+                                </span>
+                            </div>
+                            <div class="mt-3 flex gap-2">
+                                <button type="button" class="flex-1 py-2 rounded-xl border border-slate-200 bg-white hover:border-indigo-400 hover:shadow-sm transition font-bold text-sm" onclick="answerBelief('belief3', true)">Vero</button>
+                                <button type="button" class="flex-1 py-2 rounded-xl border border-slate-200 bg-white hover:border-indigo-400 hover:shadow-sm transition font-bold text-sm" onclick="answerBelief('belief3', false)">Falso</button>
+                            </div>
+                            <div id="belief3" class="hidden mt-3 text-sm p-3 rounded-xl border"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Visione guidata a tappe (attività a destra) -->
+                <section class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-lg font-bold flex items-center gap-2 text-slate-700">
+                            <i class="fas fa-clapperboard text-indigo-500"></i> Guarda a tappe
+                            <span class="tooltip">
+                                <button type="button" class="tooltip-btn" aria-label="Info">i</button>
+                                <span class="tooltip-content" role="tooltip">Clicca una tappa: il video parte da quel punto e si ferma alla fine del segmento. Poi fai la pausa guidata con domande e aiuti.</span>
+                            </span>
+                        </h3>
+                        <span id="chaptersCount" class="text-xs font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded">—</span>
+                    </div>
+                    <p class="text-sm text-slate-500 mt-2">Obiettivo: <strong>guardare piccoli pezzi</strong> + <strong>pausare</strong> + <strong>rispondere</strong>.</p>
+
+                    <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <button type="button" class="px-4 py-3 rounded-2xl bg-slate-900 text-white font-black text-sm hover:bg-black transition" onclick="startGuided()">
+                            Inizia (prima tappa)
+                        </button>
+                        <button type="button" class="px-4 py-3 rounded-2xl bg-slate-100 text-slate-800 font-black text-sm hover:bg-slate-200 transition" onclick="pauseNow()">
+                            Pausa + domande
+                        </button>
+                    </div>
+
+                    <div id="statusLine" class="mt-3 text-xs text-slate-500"></div>
+
+                    <!-- Commenti "incrustati" nella video (a richiesta) -->
+                    <div class="mt-4 p-4 bg-white rounded-2xl border border-slate-200">
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <div class="text-sm font-black text-slate-900 flex items-center gap-2">
+                                    Commenti nella video (a richiesta)
+                                    <span class="tooltip">
+                                        <button type="button" class="tooltip-btn" aria-label="Info">i</button>
+                                        <span class="tooltip-content" role="tooltip">Quando sei in difficoltà, clicca una parola: appare un commento sopra il video. Scegli la lingua (IT/FR). Non è automatico: lo chiedi tu.</span>
+                                    </span>
+                                </div>
+                                <p class="text-xs text-slate-500 mt-1">Suggerimento: usa i commenti solo quando serve (meno distrazioni).</p>
+                            </div>
+                            <div class="shrink-0 flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-2xl p-1">
+                                <button type="button" id="langBtnIt" class="px-2.5 py-1.5 rounded-xl text-xs font-black hover:bg-white transition" onclick="setVideoNotesLang('it')">IT</button>
+                                <button type="button" id="langBtnFr" class="px-2.5 py-1.5 rounded-xl text-xs font-black hover:bg-white transition" onclick="setVideoNotesLang('fr')">FR</button>
+                                <button type="button" id="langBtnBoth" class="px-2.5 py-1.5 rounded-xl text-xs font-black hover:bg-white transition" onclick="setVideoNotesLang('both')">IT+FR</button>
+                            </div>
+                        </div>
+
+                        <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <button type="button" id="captionsToggleBtn" class="px-4 py-3 rounded-2xl bg-slate-900 text-white hover:bg-black transition font-black text-sm" onclick="toggleCaptions()">
+                                Sottotitoli: OFF
+                            </button>
+                            <button type="button" class="px-4 py-3 rounded-2xl bg-slate-100 text-slate-800 hover:bg-slate-200 transition font-black text-sm" onclick="jumpToCurrentChapterStart()">
+                                Torna all'inizio della tappa
+                            </button>
+                        </div>
+                        <div class="mt-2 text-xs text-slate-500">
+                            Se attivi i <strong>sottotitoli</strong>, la trascrizione (IT/FR) appare nella video mentre ascolti. Puoi disattivarli quando vuoi.
+                        </div>
+
+                        <div id="videoNotesHint" class="mt-3 text-xs text-slate-500">Seleziona una tappa per vedere i commenti disponibili.</div>
+                        <div id="videoNotesList" class="mt-3 flex flex-wrap gap-2"></div>
+
+                        <div class="mt-3 flex flex-col sm:flex-row gap-2">
+                            <button type="button" class="flex-1 px-4 py-3 rounded-2xl bg-slate-100 text-slate-800 hover:bg-slate-200 transition font-black text-sm" onclick="hideVideoNote()">Nascondi commento</button>
+                            <button type="button" class="flex-1 px-4 py-3 rounded-2xl bg-slate-900 text-white hover:bg-black transition font-black text-sm" onclick="resumeVideo()">Riprendi video</button>
+                        </div>
+                    </div>
+
+	                    <div id="chapterPromptBox" class="mt-5 p-4 bg-indigo-50 rounded-2xl border border-indigo-100">
+	                        <div class="text-xs text-indigo-700 font-black uppercase tracking-wide mb-1">Stop & pensa</div>
+	                        <p id="chapterPrompt" class="text-sm text-indigo-900">Clicca una tappa per vedere la domanda guida.</p>
+	                    </div>
+
+                    <div id="chaptersList" class="space-y-3 mt-4"></div>
+
+                    <!-- Pausa guidata (compare a fine tappa o con "Pausa + domande") -->
+                    <div id="pausePanel" class="hidden mt-5 p-5 bg-white rounded-3xl border border-slate-200 shadow-sm">
+	                        <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+	                            <div>
+	                                <div class="text-xs text-amber-700 font-black uppercase tracking-wide mb-1">Pausa guidata</div>
+	                                <div id="pauseTitle" class="text-lg font-black text-slate-900">—</div>
+	                                <div id="pauseTime" class="text-xs text-slate-500 mt-0.5">—</div>
+	                                <div id="pauseProgress" class="text-xs text-slate-500 mt-1">—</div>
+	                            </div>
+	                            <div class="flex items-center gap-2">
+	                                <button type="button" class="px-3 py-2 rounded-xl bg-slate-100 text-slate-800 font-bold text-sm hover:bg-slate-200 transition" onclick="replayCurrentChapter()">Riascolta tappa</button>
+	                                <button id="pausePrimaryBtn" type="button" class="px-3 py-2 rounded-xl bg-indigo-600 text-white font-bold text-sm hover:bg-indigo-700 transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed" onclick="pausePrimaryAction()" disabled>—</button>
+	                            </div>
+	                        </div>
+
+	                        <div id="pausePromptWrap" class="mt-4 p-4 bg-indigo-50 rounded-2xl border border-indigo-100">
+	                            <div class="text-xs font-black uppercase tracking-wide text-indigo-700 mb-1">Stop & pensa</div>
+	                            <div id="pausePrompt" class="text-sm text-indigo-900">—</div>
+	                        </div>
+
+	                        <div id="pauseTranscriptWrap" class="mt-4 hidden">
+	                            <div class="text-xs font-black uppercase tracking-wide text-slate-500 mb-2">Estratto (trascrizione)</div>
+	                            <div id="pauseTranscript" class="whitespace-pre-wrap text-sm text-slate-700 leading-relaxed p-4 bg-slate-50 border border-slate-200 rounded-2xl"></div>
+	                        </div>
+
+                        <div class="mt-4">
+                            <div class="text-xs font-black uppercase tracking-wide text-slate-500 mb-2">Domande</div>
+                            <div id="pauseQuestions" class="space-y-2 text-sm text-slate-700"></div>
+                        </div>
+
+	                        <div id="pauseSupports" class="mt-4 space-y-2"></div>
+
+	                        <div id="pauseActions" class="mt-5 flex flex-col sm:flex-row gap-2">
+	                            <button id="pausePrimaryBtnBottom" type="button" class="flex-1 px-4 py-3 rounded-2xl bg-indigo-600 text-white font-black text-sm hover:bg-indigo-700 transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed" onclick="pausePrimaryAction()" disabled>—</button>
+	                            <button type="button" class="flex-1 px-4 py-3 rounded-2xl bg-slate-100 text-slate-800 font-black text-sm hover:bg-slate-200 transition" onclick="replayCurrentChapter()">Riascolta tappa</button>
+	                        </div>
+	                    </div>
+
+                    <div class="mt-5 p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                        <div class="text-xs font-black uppercase tracking-wide text-slate-500 mb-1">Le tue risposte</div>
+                        <p class="text-xs text-slate-600 leading-relaxed">Le risposte si salvano automaticamente su questo dispositivo. Alla fine, puoi copiarle o scaricarle.</p>
+                        <div class="mt-3 flex flex-col sm:flex-row gap-2">
+                            <button type="button" class="flex-1 px-4 py-3 rounded-2xl bg-white border border-slate-200 hover:border-indigo-400 hover:shadow-sm transition font-black text-sm" onclick="copyAllAnswers()">Copia tutte le risposte</button>
+                            <button type="button" class="flex-1 px-4 py-3 rounded-2xl bg-slate-900 text-white hover:bg-black transition font-black text-sm" onclick="downloadAllAnswers()">Scarica (.txt)</button>
+                        </div>
+                        <div id="exportStatus" class="mt-2 text-xs text-slate-500"></div>
+                    </div>
+                </section>
+
+                <!-- Quiz Progress -->
+                <section class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+                    <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+                        <i class="fas fa-tasks text-emerald-500"></i> Verifica Comprensione
+                    </h3>
+                    <div id="quizArea" class="space-y-4">
+                        <div class="p-4 bg-slate-50 rounded-2xl">
+                            <p class="text-sm text-slate-600 mb-4" id="quizQuestion">Sei pronto a testare le tue conoscenze sul video?</p>
+                            <button onclick="startQuiz()" id="startBtn" class="w-full py-3 bg-slate-900 text-white rounded-xl hover:bg-black transition font-bold text-sm">
+                                Comincia il Quiz
+                            </button>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: guida iniziale (mostrata una sola volta per dispositivo) -->
+    <div id="introModal" class="hidden fixed inset-0 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div class="bg-white p-8 rounded-[2rem] max-w-lg w-full shadow-2xl border border-slate-100">
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <div class="text-xs text-indigo-600 font-black uppercase tracking-wide">Prima di iniziare</div>
+                    <h2 class="text-2xl font-black mt-1 text-slate-900">Un consiglio per capire meglio</h2>
+                </div>
+                <button type="button" class="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 transition font-black text-slate-700" onclick="closeIntroModal()">×</button>
+            </div>
+
+            <p class="text-slate-600 mt-4 leading-relaxed">
+                <strong>Consiglio:</strong> guarda il video <strong>una prima volta senza interruzioni</strong>.
+                Poi rifallo <strong>a tappe</strong>: la video si ferma e tu rispondi alle domande.
+            </p>
+            <p class="text-slate-500 mt-3 text-sm leading-relaxed">
+                FR (aide) : Regarde d'abord la vidéo une fois en entier, puis refais l'activité par segments.
+            </p>
+
+            <div class="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button type="button" class="px-4 py-3 rounded-2xl bg-slate-900 text-white font-black text-sm hover:bg-black transition" onclick="introWatchOnce()">
+                    Guarda 1 volta
+                </button>
+                <button type="button" class="px-4 py-3 rounded-2xl bg-indigo-600 text-white font-black text-sm hover:bg-indigo-700 transition shadow-sm" onclick="introStartActivity()">
+                    Inizia a tappe
+                </button>
+            </div>
+
+            <div class="mt-4 text-xs text-slate-500 flex items-center gap-2">
+                <input id="introDontShow" type="checkbox" class="w-4 h-4 accent-indigo-600" checked>
+                <label for="introDontShow">Non mostrare più questo messaggio su questo dispositivo</label>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Risultati -->
+    <div id="modal" class="hidden fixed inset-0 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div class="bg-white p-8 rounded-[2rem] max-w-md w-full text-center shadow-2xl border border-slate-100">
+            <div id="modalIcon" class="text-6xl mb-6"></div>
+            <h2 id="modalTitle" class="text-2xl font-black mb-3 text-slate-900"></h2>
+            <p id="modalText" class="text-slate-600 mb-8 leading-relaxed"></p>
+            <button onclick="closeModal()" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all">Continua</button>
+        </div>
+    </div>
+
+    <script>
+        let score = 0;
+        let currentQuizIndex = 0;
+
+        /* -------------------------------
+           1) Rappresentazioni (Vero/Falso)
+        --------------------------------- */
+        const beliefs = {
+            belief1: {
+                correct: false,
+                ok: "“Dilettante” non vuol dire “scarso”. Qui significa: non professionista, spesso senza contratto e senza tutele.",
+                ko: "In realtà “dilettante” non parla di talento, ma di status (contratti e tutele)."
+            },
+            belief2: {
+                correct: true,
+                ok: "Esatto: la parità riguarda opportunità e tutele (diritti, protezioni, risorse).",
+                ko: "Rileggi: la parità riguarda diritti e opportunità (tutele, risorse, visibilità), non “tutti identici”."
+            },
+            belief3: {
+                correct: false,
+                ok: "Giusto: un successo individuale non garantisce automaticamente parità di contratti, visibilità e tutele.",
+                ko: "Attenzione: vincere è importante, ma non basta da solo per garantire parità di diritti e opportunità."
+            }
+        };
+
+        function answerBelief(id, chosen) {
+            const el = document.getElementById(id);
+            const item = beliefs[id];
+            if (!el || !item) return;
+
+            const isCorrect = chosen === item.correct;
+            el.classList.remove('hidden');
+
+            if (isCorrect) {
+                el.style.backgroundColor = '#e6f4ea';
+                el.style.borderColor = '#ceead6';
+                el.style.color = '#0d652d';
+                el.innerHTML = "<strong>Corretto.</strong> " + item.ok;
+                return;
+            }
+
+            el.style.backgroundColor = '#fef7e0';
+            el.style.borderColor = '#fde293';
+            el.style.color = '#7a4a00';
+            el.innerHTML = "<strong>Non proprio.</strong> " + item.ko;
+        }
+
+        /* -------------------------------
+           2) Sequenza video (capitoli)
+        --------------------------------- */
+        let player = null;
+        let chapterStopTimer = null;
+        let currentChapter = null;
+        let pauseMode = "end"; // "end" | "manual"
+        let pauseAllDone = false; // serve per animare lo sblocco una sola volta
+        let videoNotesLang = "it"; // "it" | "fr" | "both"
+        let lastVideoNote = null;
+        let captionsEnabled = false;
+        let captionsTimer = null;
+        let lastCaptionIndex = -1;
+        let videoBubbleItems = [];
+        let videoBubbleShown = [];
+        let videoBubbleVisibleIndex = null;
+        const ANSWERS_STORAGE_KEY = "sport_parita_answers_v1";
+        const INTRO_SEEN_KEY = "sport_parita_intro_seen_v1";
+        let answersState = loadAnswersState();
+
+        // Capitoli basati sulla trascrizione fornita (durata ~ 1:49 di parlato + sigla).
+        const defaultChapters = [
+            {
+                id: "intro",
+                icon: "fa-flag-checkered",
+                title: "Lo sport e la parità",
+                summary: "Parità di genere nell'agonismo: una gara non ancora conclusa.",
+                start: 2,
+                end: 15,
+                prompt: "Perché il video dice che la parità è una gara “non ancora conclusa”?",
+                bubble: "Idea chiave: parità = diritti + opportunità + tutele. Non basta il talento.",
+                pause: {
+                    transcript:
+`Lo sport è forza, intelligenza, talento.
+Da sempre le donne lottano per ottenere questi riconoscimenti perché la parità di genere nell'agonismo
+è una gara iniziata al secolo scorso e non ancora conclusa.`,
+                    questions: [
+                        {
+                            id: "q1",
+                            text: "1) Comprensione: perché la parità di genere nell'agonismo è “non ancora conclusa”?",
+                            minChars: 30,
+                            keywordsAny: ["ancora", "gara", "parità", "tutele", "diritti", "opportunità"],
+                            placeholder: "Rispondi con 1–2 frasi."
+                        },
+                        {
+                            id: "q2",
+                            text: "2) Lessico: spiega “agonismo” con parole semplici.",
+                            minChars: 20,
+                            keywordsAny: ["gara", "competizione", "sport"],
+                            placeholder: "Agonismo = …"
+                        },
+                        {
+                            id: "q3",
+                            text: "3) Collegamento: scrivi 2 ostacoli possibili alla parità nello sport.",
+                            minWords: 6,
+                            keywordsAny: ["contratti", "visibilità", "risorse", "tutele", "stipendi", "pregiudizi"],
+                            placeholder: "Esempio: … e …"
+                        }
+                    ],
+                    supports: [
+                        {
+                            title: "Aiuto (IT) — Idee chiave",
+                            body: "Il video dice che la parità è una “gara” perché il percorso è lungo e non finito: contano anche contratti, tutele, risorse e visibilità (non solo il talento)."
+                        },
+                        {
+                            title: "Aiuto (FR) — Traduction rapide",
+                            body: "Le sport = force, intelligence, talent. Les femmes se battent pour la reconnaissance car l'égalité femmes-hommes dans le sport de compétition est une course commencée au siècle dernier et pas encore terminée.\nagonismo = sport de compétition.\nparità di genere = égalité femmes-hommes."
+                        }
+                    ]
+                },
+                videoBubbles: [
+                    { id: "riconoscimenti", label: "riconoscimenti", at: 7, it: "rispetto, premi, diritti riconosciuti", fr: "reconnaissance (respect, droits, récompenses)" },
+                    { id: "parita", label: "parità di genere", at: 8, it: "uguaglianza tra donne e uomini (diritti, opportunità)", fr: "égalité femmes-hommes (droits, chances)" },
+                    { id: "agonismo", label: "agonismo", at: 11, it: "sport di competizione (gare)", fr: "sport de compétition" },
+                    { id: "secolo", label: "secolo scorso", at: 13, it: "il secolo passato (XX secolo)", fr: "le siècle dernier (XXe siècle)" }
+                ]
+            },
+            {
+                id: "alfonsina",
+                icon: "fa-bicycle",
+                title: "Alfonsina Strada (1924)",
+                summary: "Abbattere un muro: accesso alle gare di ciclismo.",
+                start: 15,
+                end: 26,
+                prompt: "Quale “muro” ha abbattuto Alfonsina Strada?",
+                bubble: "Pioniera = prima persona ad aprire una strada per gli altri.",
+                pause: {
+                    transcript:
+`La prima ad abbattere il muro che vietava l'accesso alle gare di ciclismo alle donne è stata Alfonsina Strada:
+ha partecipato nel 1924 al Giro d'Italia.`,
+                    questions: [
+                        {
+                            id: "q1",
+                            text: "1) Comprensione: quale “muro” ha abbattuto Alfonsina Strada?",
+                            minChars: 25,
+                            keywordsAny: ["divieto", "accesso", "gare", "ciclismo", "donne"],
+                            placeholder: "Il muro era…"
+                        },
+                        {
+                            id: "q2",
+                            text: "2) Interpretazione: che cosa significa essere una pioniera? (1 frase)",
+                            minChars: 25,
+                            keywordsAny: ["prima", "aprire", "strada", "esempio"],
+                            placeholder: "Essere una pioniera significa…"
+                        },
+                        {
+                            id: "q3",
+                            text: "3) Oggi: esistono ancora “muri” nello sport o nella società? Fai 1 esempio.",
+                            minChars: 25,
+                            keywordsAny: ["ancora", "oggi", "esempio", "divieto", "pregiudizi"],
+                            placeholder: "Un esempio è…"
+                        }
+                    ],
+                    supports: [
+                        {
+                            title: "Aiuto (IT) — Riformulazione facile",
+                            body: "Nel 1924 Alfonsina Strada partecipa a una gara per uomini. È importante perché rompe un divieto e mostra che certe regole erano sociali, non sportive."
+                        },
+                        {
+                            title: "Aiuto (FR) — Traduction + mots",
+                            body: "La première à “abattre le mur” (supprimer un interdit) qui empêchait les femmes de participer aux courses de cyclisme a été Alfonsina Strada.\nabbattere un muro = abattre un mur / supprimer une barrière\nvietava l'accesso = interdisait l'accès"
+                        }
+                    ]
+                },
+                videoBubbles: [
+                    { id: "abbattere", label: "abbattere il muro", at: 16, it: "eliminare un divieto / una barriera", fr: "abattre un mur = supprimer une barrière / un interdit" },
+                    { id: "vietava", label: "vietava l'accesso", at: 18, it: "non permetteva di entrare o partecipare", fr: "interdisait l'accès" },
+                    { id: "ciclismo", label: "ciclismo", at: 19, it: "sport della bicicletta", fr: "cyclisme" },
+                    { id: "giro", label: "Giro d'Italia", at: 21, it: "grande corsa ciclistica in Italia", fr: "grande course cycliste italienne" }
+                ]
+            },
+            {
+                id: "impegno",
+                icon: "fa-bullseye",
+                title: "Modelli & impegno",
+                summary: "Un'atleta che vince può cambiare le idee e dare forza.",
+                start: 26,
+                end: 36,
+                prompt: "Spiega: “con l'impegno siamo forti tanto quanto gli uomini”.",
+                bubble: "Impegno = sforzo costante. Il video parla di modelli (esempi) che motivano.",
+                pause: {
+                    transcript:
+`Non c'è nulla di più potente dell'immagine di un'atleta che vince per insegnare alle altre donne che con l'impegno
+siamo forti tanto quanto gli uomini.`,
+                    questions: [
+                        {
+                            id: "q1",
+                            text: "1) Comprensione: perché l'immagine di un'atleta che vince è “potente”?",
+                            minChars: 25,
+                            keywordsAny: ["esempio", "modello", "insegnare", "forza"],
+                            placeholder: "È potente perché…"
+                        },
+                        {
+                            id: "q2",
+                            text: "2) Interpretazione: spiega la frase “con l'impegno siamo forti tanto quanto gli uomini”.",
+                            minChars: 30,
+                            keywordsAny: ["impegno", "forti", "tanto", "quanto"],
+                            placeholder: "Secondo me significa che…"
+                        },
+                        {
+                            id: "q3",
+                            text: "3) Produzione: scrivi 1 frase motivante per un/a compagno/a che vuole migliorare.",
+                            minChars: 20,
+                            keywordsAny: ["puoi", "continua", "impegno", "allenati", "prova"],
+                            placeholder: "Esempio: “…”"
+                        }
+                    ],
+                    supports: [
+                        {
+                            title: "Aiuto (IT) — Spiegazione",
+                            body: "Il video dice che un esempio reale (un'atleta che vince) fa capire che è possibile. L'impegno (studio, allenamento, costanza) aiuta a superare stereotipi."
+                        },
+                        {
+                            title: "Aiuto (FR) — Traduction",
+                            body: "Rien n'est plus puissant que l'image d'une athlète qui gagne: cela peut apprendre aux autres femmes qu'avec l'effort / l'engagement on est aussi fortes que les hommes.\nimpegno = effort / engagement\ntanto quanto = autant que"
+                        }
+                    ]
+                },
+                videoBubbles: [
+                    { id: "potente", label: "più potente", at: 26, it: "molto forte, che convince", fr: "très puissant" },
+                    { id: "immagine", label: "immagine", at: 28, it: "qui: esempio visibile, modello", fr: "image / exemple (modèle)" },
+                    { id: "impegno", label: "impegno", at: 32, it: "sforzo costante, costanza", fr: "effort, engagement, régularité" },
+                    { id: "tanto", label: "tanto quanto", at: 33, it: "allo stesso livello", fr: "autant que / au même niveau" }
+                ]
+            },
+            {
+                id: "campionesse",
+                icon: "fa-medal",
+                title: "Campionesse italiane",
+                summary: "Compagnoni, Cagnotto, Pellegrini: esempi di eccellenza.",
+                start: 36,
+                end: 62,
+                prompt: "Scegli un'atleta: quale impresa ti colpisce di più? (1 frase)",
+                bubble: "Parole utili: performance, podio, medaglia d'oro.",
+                pause: {
+                    transcript:
+`Sono tante le sportive italiane che ci hanno fatto sognare con le loro performance.
+Alcune sono arrivate prime sul podio e anche nella storia:
+Deborah Compagnoni, nel gigante di sci, è stata la prima a vincere tre ori in tre Olimpiadi diverse.
+Tania Cagnotto, la tuffatrice europea con più podi.
+Federica Pellegrini, la prima nuotatrice italiana a vincere la medaglia d'oro alle Olimpiadi.`,
+                    questions: [
+                        {
+                            id: "q1",
+                            text: "1) Comprensione: scegli un'atleta nominata e scrivi la sua impresa. (1 frase)",
+                            minChars: 25,
+                            keywordsAny: ["Compagnoni", "Cagnotto", "Pellegrini", "Olimpiadi", "oro", "podio"],
+                            placeholder: "Io scelgo… perché…"
+                        },
+                        {
+                            id: "q2",
+                            text: "2) Lessico: che cosa significa “podio”?",
+                            minChars: 15,
+                            keywordsAny: ["primi", "tre", "posti"],
+                            placeholder: "Podio = …"
+                        },
+                        {
+                            id: "q3",
+                            text: "3) Perché queste storie possono “far sognare” e motivare altre persone?",
+                            minChars: 25,
+                            keywordsAny: ["esempio", "modello", "motivare", "possibile"],
+                            placeholder: "Secondo me…"
+                        }
+                    ],
+                    supports: [
+                        {
+                            title: "Aiuto (IT) — Chi sono?",
+                            body: "Deborah Compagnoni (sci), Tania Cagnotto (tuffi), Federica Pellegrini (nuoto). Il video le cita come esempi di eccellenza e “prime” nella storia."
+                        },
+                        {
+                            title: "Aiuto (FR) — Traduction + mots",
+                            body: "Beaucoup de sportives italiennes nous ont fait rêver par leurs performances. Certaines sont arrivées premières sur le podium et dans l'histoire.\npodio = podium (1er/2e/3e)\nmedaglia d'oro = médaille d'or\nperformance = performances (résultats)"
+                        }
+                    ]
+                },
+                videoBubbles: [
+                    { id: "performance", label: "performance", at: 39, it: "prestazioni sportive", fr: "performances (résultats)" },
+                    { id: "podio", label: "podio", at: 41, it: "i primi tre posti (1°, 2°, 3°)", fr: "podium (les 3 premiers)" },
+                    { id: "treori", label: "tre ori", at: 50, it: "tre medaglie d'oro", fr: "trois médailles d'or" },
+                    { id: "tuffi", label: "tuffatrice", at: 53, it: "atleta dei tuffi", fr: "plongeuse" },
+                    { id: "nuoto", label: "nuotatrice", at: 58, it: "atleta del nuoto", fr: "nageuse" },
+                    { id: "oro", label: "medaglia d'oro", at: 60, it: "premio per il primo posto", fr: "médaille d'or" }
+                ]
+            },
+            {
+                id: "legge1981",
+                icon: "fa-scale-balanced",
+                title: "Legge 1981: dilettanti senza tutele",
+                summary: "Atlete forti… ma senza lo stesso status e le stesse protezioni.",
+                start: 62,
+                end: 82,
+                prompt: "Che cosa sono le “tutele”? Scrivi 2 esempi.",
+                bubble: "Attenzione: “dilettante” qui parla di contratti e tutele, non di bravura.",
+                pause: {
+                    transcript:
+`Spesso sono state loro a caricarsi sulle spalle l'intero movimento sportivo, a condurlo alla gloria,
+mentre i colleghi maschi faticavano ad ottenere risultati.
+Secondo una legge del 1981 le atlete che vediamo gareggiare in TV non sono delle professioniste come invece gli uomini:
+restano delle dilettanti senza tutele.`,
+                    questions: [
+                        {
+                            id: "q1",
+                            text: "1) Comprensione: spiega l'espressione “caricarsi sulle spalle” (in questo contesto).",
+                            minChars: 25,
+                            keywordsAny: ["responsabilità", "peso", "portare", "farsi carico"],
+                            placeholder: "Significa che…"
+                        },
+                        {
+                            id: "q2",
+                            text: "2) Secondo la legge del 1981, le atlete in TV sono professioniste? (Sì/No + perché)",
+                            minChars: 25,
+                            keywordsAny: ["dilettanti", "professioniste", "tutele"],
+                            placeholder: "No/Sì, perché…"
+                        },
+                        {
+                            id: "q3",
+                            text: "3) Lessico: che cosa sono le “tutele”? Scrivi 2 esempi.",
+                            minWords: 6,
+                            keywordsAny: ["maternità", "infortunio", "assicurazione", "pensione", "stipendio", "contratto"],
+                            placeholder: "Esempio: … e …"
+                        }
+                    ],
+                    supports: [
+                        {
+                            title: "Aiuto (IT) — Definizioni rapide",
+                            body: "tutele = protezioni (assicurazione, maternità, infortuni, pensione…). Nel video, “dilettanti” significa spesso senza contratto e senza queste protezioni."
+                        },
+                        {
+                            title: "Aiuto (FR) — Traduction",
+                            body: "Souvent, ce sont elles qui ont “porté sur leurs épaules” tout le mouvement sportif et l'ont mené à la gloire. Mais selon une loi de 1981, les athlètes vues à la TV ne sont pas professionnelles: elles restent amatrices sans protections sociales.\ncaricarsi sulle spalle = porter sur ses épaules (prendre une grande responsabilité)\ntutele = protections (maternité, assurance, retraite…)"
+                        }
+                    ]
+                },
+                videoBubbles: [
+                    { id: "caricarsi", label: "caricarsi sulle spalle", at: 62, it: "prendere una grande responsabilità", fr: "porter sur ses épaules (prendre une grande responsabilité)" },
+                    { id: "gloria", label: "condurlo alla gloria", at: 67, it: "portarlo al successo", fr: "le mener à la gloire (au succès)" },
+                    { id: "colleghi", label: "colleghi maschi", at: 68, it: "collègues hommes", fr: "collègues masculins" },
+                    { id: "legge", label: "legge del 1981", at: 72, it: "norma giuridica del 1981", fr: "loi de 1981" },
+                    { id: "dilettanti", label: "dilettanti", at: 79, it: "amatori / non professionisti", fr: "amateurs (pas pro)" },
+                    { id: "tutele", label: "tutele", at: 81, it: "protezioni (assicurazione, maternità…)", fr: "protections sociales (assurance, maternité…)" }
+                ]
+            },
+            {
+                id: "maternita",
+                icon: "fa-hand-holding-heart",
+                title: "Vittoria epocale: fondo maternità",
+                summary: "Un passo concreto: tutele e diritti riconosciuti per legge.",
+                start: 82,
+                end: 93,
+                prompt: "Qual è la “vittoria epocale” citata nel video?",
+                bubble: "Epocale = storica. Fondo = soldi / sostegno per un diritto.",
+                pause: {
+                    transcript:
+`Una storia che può cambiare in tutti i settori.
+Nello sport le nostre atlete hanno ottenuto una vittoria epocale: è stato riconosciuto per legge un fondo per la maternità.`,
+                    questions: [
+                        {
+                            id: "q1",
+                            text: "1) Comprensione: qual è la “vittoria epocale” citata nel video?",
+                            minChars: 20,
+                            keywordsAny: ["fondo", "maternità", "legge"],
+                            placeholder: "La vittoria epocale è…"
+                        },
+                        {
+                            id: "q2",
+                            text: "2) Spiega: perché un fondo maternità è una tutela importante? (1 frase)",
+                            minChars: 25,
+                            keywordsAny: ["tutela", "diritto", "protezione", "sicurezza"],
+                            placeholder: "È importante perché…"
+                        },
+                        {
+                            id: "q3",
+                            text: "3) Collegamento: cita 2 altre tutele importanti per un'atleta (o per un lavoratore).",
+                            minWords: 6,
+                            keywordsAny: ["infortunio", "assicurazione", "pensione", "contratto", "stipendio"],
+                            placeholder: "Esempio: … e …"
+                        }
+                    ],
+                    supports: [
+                        {
+                            title: "Aiuto (IT) — Esempi di tutele",
+                            body: "Tutele possono essere: maternità, infortuni, assicurazione, pensione, contratto, sicurezza economica."
+                        },
+                        {
+                            title: "Aiuto (FR) — Traduction",
+                            body: "Une victoire historique: un fonds pour la maternité est reconnu par la loi.\nvittoria epocale = victoire historique\nfondo = fonds (argent prévu)\nmaternità = maternité"
+                        }
+                    ]
+                },
+                videoBubbles: [
+                    { id: "epocale", label: "vittoria epocale", at: 87, it: "vittoria storica, molto importante", fr: "victoire historique" },
+                    { id: "riconosciuto", label: "riconosciuto per legge", at: 89, it: "accettato ufficialmente da una legge", fr: "reconnu par la loi" },
+                    { id: "fondo", label: "fondo", at: 91, it: "somma di denaro / sostegno", fr: "fonds (argent prévu)" },
+                    { id: "maternita", label: "maternità", at: 92, it: "periodo di gravidanza e nascita", fr: "maternité" }
+                ]
+            },
+            {
+                id: "limiti",
+                icon: "fa-bolt",
+                title: "Femminilità & limiti",
+                summary: "Un'idea di femminilità diversa e la forza di cambiare abitudini.",
+                start: 93,
+                end: 109,
+                prompt: "Cosa significa: “gli unici limiti insuperabili sono quelli che abbiamo dentro di noi”?",
+                bubble: "Parole chiave: scolpiti, patinata, sradicare, consuetudini, limiti insuperabili.",
+                pause: {
+                    transcript:
+`Con i loro muscoli e i fisici scolpiti affermano un'idea di femminilità finalmente diversa da quella patinata
+delle copertine dei giornali.
+Ci danno la forza di sradicare consuetudini sbagliate e ricordano che gli unici limiti insuperabili sono quelli
+che ancora abbiamo dentro di noi: per il resto niente ci può fermare.`,
+                    questions: [
+                        {
+                            id: "q1",
+                            text: "1) Comprensione: che tipo di “femminilità” viene descritta? (2 parole)",
+                            minWords: 2,
+                            keywordsAny: ["forte", "muscoli", "scolpiti", "diversa", "patinata", "copertina"],
+                            placeholder: "Esempio: “forte, reale” / “non patinata” / “muscoli scolpiti”…"
+                        },
+                        {
+                            id: "q2",
+                            text: "2) Interpretazione: che cosa vuol dire “i limiti sono dentro di noi”?",
+                            minChars: 25,
+                            keywordsAny: ["paura", "idea", "testa", "dentro", "convincimento", "pensare"],
+                            placeholder: "Secondo me significa che…"
+                        },
+                        {
+                            id: "q3",
+                            text: "3) Collegamento: un esempio (scuola, sport o vita) in cui un limite era “nella testa”.",
+                            minChars: 25,
+                            keywordsAny: ["esempio", "quando", "prima", "poi", "riuscito", "capito"],
+                            placeholder: "Un esempio è quando…"
+                        }
+                    ],
+                    supports: [
+                        {
+                            title: "Aiuto (IT) — Riformulazione facile",
+                            body: "Le atlete mostrano un modo diverso di essere donne: non solo “perfette” da copertina, ma forti. Il limite più grande, spesso, è la paura o l'idea che “non ce la posso fare”."
+                        },
+                        {
+                            title: "Aiuto (FR) — Mots clés",
+                            body: "scolpiti = bien dessinés / très définis\npatinata = lisse, “glamour”, comme une couverture\nsradicare = déraciner / enlever complètement\nconsuetudini = habitudes\nlimiti insuperabili = limites impossibles à dépasser\ndentro di noi = en nous / dans notre tête"
+                        },
+                        {
+                            title: "Aiuto (IT) — Frasi utili",
+                            body: "Secondo me, questa frase significa che…\nUn esempio è quando…\nPenso che il limite fosse… perché…"
+                        }
+                    ]
+                },
+                videoBubbles: [
+                    { id: "scolpiti", label: "scolpiti", at: 94, it: "muscoli ben definiti", fr: "muscles bien dessinés / très définis" },
+                    { id: "patinata", label: "patinata", at: 98, it: "troppo perfetta, “da copertina”", fr: "trop lisse, “glamour”, comme une couverture de magazine" },
+                    { id: "sradicare", label: "sradicare", at: 100, it: "eliminare completamente (abitudini sbagliate)", fr: "déraciner / enlever complètement (des habitudes)" },
+                    { id: "consuetudini", label: "consuetudini", at: 103, it: "abitudini", fr: "habitudes" },
+                    { id: "limiti", label: "limiti insuperabili", at: 105, it: "limiti che sembrano impossibili da superare", fr: "limites qui semblent impossibles à dépasser" }
+                ]
+            }
+        ];
+
+        let chapters = defaultChapters.map(c => ({ ...c }));
+
+        /* -------------------------------
+           Stato risposte (salvataggio locale)
+        --------------------------------- */
+        function loadAnswersState() {
+            try {
+                const raw = localStorage.getItem(ANSWERS_STORAGE_KEY);
+                if (!raw) return { answers: {} };
+                const parsed = JSON.parse(raw);
+                if (!parsed || typeof parsed !== "object") return { answers: {} };
+                if (!parsed.answers || typeof parsed.answers !== "object") parsed.answers = {};
+                return parsed;
+            } catch (_) {
+                return { answers: {} };
+            }
+        }
+
+        function persistAnswersState() {
+            try {
+                localStorage.setItem(ANSWERS_STORAGE_KEY, JSON.stringify(answersState));
+            } catch (_) {}
+        }
+
+        function getAnswer(chapterId, questionId) {
+            return String(answersState?.answers?.[chapterId]?.[questionId] || "");
+        }
+
+        function setAnswer(chapterId, questionId, text) {
+            if (!answersState.answers || typeof answersState.answers !== "object") answersState.answers = {};
+            if (!answersState.answers[chapterId]) answersState.answers[chapterId] = {};
+            answersState.answers[chapterId][questionId] = String(text || "");
+            answersState.updatedAt = Date.now();
+            persistAnswersState();
+        }
+
+        function setVideoNotesLang(lang) {
+            videoNotesLang = (lang === "fr" || lang === "both") ? lang : "it";
+            updateVideoNotesLangButtons();
+            renderVideoNotesForChapter(currentChapter);
+            if (lastVideoNote) showVideoNote(lastVideoNote, { pause: false });
+            updateCaptionsNow(true);
+        }
+
+        function updateVideoNotesLangButtons() {
+            const it = document.getElementById("langBtnIt");
+            const fr = document.getElementById("langBtnFr");
+            const both = document.getElementById("langBtnBoth");
+            if (!it || !fr || !both) return;
+
+            const all = [it, fr, both];
+            all.forEach(b => {
+                b.style.backgroundColor = "transparent";
+                b.style.color = "#0f172a";
+            });
+
+            const selected = videoNotesLang === "fr" ? fr : (videoNotesLang === "both" ? both : it);
+            selected.style.backgroundColor = "#0f172a";
+            selected.style.color = "#ffffff";
+        }
+
+        function formatVideoNoteText(note) {
+            const label = note?.label ? String(note.label) : "Nota";
+            const it = note?.it ? String(note.it) : "";
+            const fr = note?.fr ? String(note.fr) : "";
+
+            if (videoNotesLang === "both") {
+                const lines = [];
+                lines.push(`${label}`);
+                if (it) lines.push(`IT: ${it}`);
+                if (fr) lines.push(`FR: ${fr}`);
+                return lines.join("\n");
+            }
+            if (videoNotesLang === "fr") return fr ? `FR: ${fr}` : (it ? `IT: ${it}` : label);
+            return it ? `IT: ${it}` : (fr ? `FR: ${fr}` : label);
+        }
+
+        // Trascrizione completa (IT + FR) in sottotitoli. Si mostra solo se l'utente la attiva.
+        const transcriptCues = [
+            { start: 0, end: 2, it: "[Musica] [Applauso]", fr: "[Musique] [Applaudissements]" },
+            { start: 2, end: 6, it: "Lo sport è forza, intelligenza, talento.", fr: "Le sport est force, intelligence, talent." },
+            { start: 6, end: 11, it: "Da sempre le donne lottano per ottenere questi riconoscimenti.", fr: "Depuis toujours, les femmes luttent pour obtenir cette reconnaissance." },
+            { start: 11, end: 15, it: "La parità di genere nell'agonismo è una gara iniziata al secolo scorso e non ancora conclusa.", fr: "L'égalité femmes-hommes dans le sport de compétition est une course commencée au siècle dernier et pas encore terminée." },
+            { start: 15, end: 19, it: "La prima ad abbattere il muro che vietava l'accesso alle gare di ciclismo alle donne…", fr: "La première à abattre le mur qui interdisait aux femmes l'accès aux courses de cyclisme…" },
+            { start: 19, end: 26, it: "…è stata Alfonsina Strada: nel 1924 ha partecipato al Giro d'Italia.", fr: "…c'est Alfonsina Strada : en 1924, elle a participé au Giro d'Italia." },
+            { start: 26, end: 30, it: "Non c'è nulla di più potente dell'immagine di un'atleta che vince…", fr: "Rien n'est plus puissant que l'image d'une athlète qui gagne…" },
+            { start: 30, end: 36, it: "…per insegnare alle altre donne che con l'impegno siamo forti tanto quanto gli uomini.", fr: "…pour montrer aux autres femmes qu'avec l'effort, nous sommes aussi fortes que les hommes." },
+            { start: 36, end: 41, it: "Sono tante le sportive italiane che ci hanno fatto sognare con le loro performance.", fr: "De nombreuses sportives italiennes nous ont fait rêver par leurs performances." },
+            { start: 41, end: 47, it: "Ma alcune sono arrivate prime sul podio e anche nella storia:", fr: "Mais certaines sont arrivées premières sur le podium et dans l'histoire :" },
+            { start: 47, end: 53, it: "Deborah Compagnoni, nello sci, prima a vincere tre ori in tre Olimpiadi diverse.", fr: "Deborah Compagnoni, au ski, première à gagner trois médailles d'or lors de trois Jeux olympiques différents." },
+            { start: 53, end: 58, it: "Tania Cagnotto: la tuffatrice europea con più podi.", fr: "Tania Cagnotto : la plongeuse européenne avec le plus de podiums." },
+            { start: 58, end: 62, it: "Federica Pellegrini: prima nuotatrice italiana a vincere l'oro alle Olimpiadi.", fr: "Federica Pellegrini : première nageuse italienne à remporter l'or aux Jeux olympiques." },
+            { start: 62, end: 67, it: "Spesso sono state loro a caricarsi sulle spalle l'intero movimento sportivo…", fr: "Souvent, ce sont elles qui ont porté sur leurs épaules tout le mouvement sportif…" },
+            { start: 67, end: 72, it: "…a condurlo alla gloria, mentre i colleghi maschi faticavano ad ottenere risultati.", fr: "…et l'ont mené à la gloire, tandis que leurs collègues masculins peinaient à obtenir des résultats." },
+            { start: 72, end: 77, it: "Secondo una legge del 1981, le atlete che vediamo gareggiare in TV…", fr: "Selon une loi de 1981, les athlètes que l'on voit concourir à la télévision…" },
+            { start: 77, end: 82, it: "…non sono professioniste come gli uomini: restano dilettanti senza tutele.", fr: "…ne sont pas professionnelles comme les hommes : elles restent amatrices, sans protections." },
+            { start: 82, end: 85, it: "Una storia che può cambiare in tutti i settori.", fr: "Une histoire qui peut changer dans tous les secteurs." },
+            { start: 85, end: 93, it: "Nello sport, le nostre atlete hanno ottenuto una vittoria epocale: per legge è stato riconosciuto un fondo per la maternità.", fr: "Dans le sport, nos athlètes ont obtenu une victoire historique : la loi reconnaît un fonds pour la maternité." },
+            { start: 93, end: 98, it: "Con i loro muscoli e i fisici scolpiti affermano un'idea di femminilità…", fr: "Avec leurs muscles et leurs corps sculptés, elles affirment une idée de la féminité…" },
+            { start: 98, end: 100, it: "…diversa da quella patinata delle copertine dei giornali.", fr: "…différente de l'image lisse des couvertures de magazines." },
+            { start: 100, end: 105, it: "Ci danno la forza di sradicare consuetudini sbagliate e ricordano che…", fr: "Elles nous donnent la force de déraciner de mauvaises habitudes et rappellent que…" },
+            { start: 105, end: 109, it: "…gli unici limiti insuperabili sono quelli che abbiamo dentro di noi: per il resto niente ci può fermare.", fr: "…les seules limites impossibles à dépasser sont celles que nous avons en nous : pour le reste, rien ne peut nous arrêter." },
+            { start: 109, end: 113, it: "[Musica]", fr: "[Musique]" }
+        ];
+
+        function getTranscriptCueIndexAtTime(seconds) {
+            const t = Math.max(0, Number(seconds) || 0);
+            for (let i = 0; i < transcriptCues.length; i++) {
+                const c = transcriptCues[i];
+                const start = Math.max(0, Number(c.start) || 0);
+                const end = (c.end == null) ? Infinity : Math.max(0, Number(c.end) || 0);
+                if (t >= start && t < end) return i;
+            }
+            return -1;
+        }
+
+        function formatTranscriptCueText(cue) {
+            const it = cue?.it ? String(cue.it) : "";
+            const fr = cue?.fr ? String(cue.fr) : "";
+
+            if (videoNotesLang === "both") {
+                const lines = [];
+                if (it) lines.push(`IT: ${it}`);
+                if (fr) lines.push(`FR: ${fr}`);
+                return lines.join("\n");
+            }
+
+            if (videoNotesLang === "fr") return fr || it || "";
+            return it || fr || "";
+        }
+
+        function updateCaptionsToggleButton() {
+            const btn = document.getElementById("captionsToggleBtn");
+            if (!btn) return;
+
+            btn.textContent = captionsEnabled ? "Sottotitoli: ON" : "Sottotitoli: OFF";
+            btn.classList.toggle("bg-emerald-600", captionsEnabled);
+            btn.classList.toggle("hover:bg-emerald-700", captionsEnabled);
+            btn.classList.toggle("bg-slate-900", !captionsEnabled);
+            btn.classList.toggle("hover:bg-black", !captionsEnabled);
+        }
+
+        function updateCaptionsAtTime(seconds, force) {
+            const wrap = document.getElementById("videoCaptions");
+            const textEl = document.getElementById("videoCaptionsText");
+            if (!wrap || !textEl) return;
+
+            if (!captionsEnabled) {
+                wrap.classList.add("hidden");
+                textEl.textContent = "";
+                lastCaptionIndex = -1;
+                return;
+            }
+
+            const idx = getTranscriptCueIndexAtTime(seconds);
+            if (idx < 0) {
+                textEl.textContent = "";
+                wrap.classList.add("hidden");
+                lastCaptionIndex = -1;
+                return;
+            }
+
+            if (!force && idx === lastCaptionIndex) return;
+
+            lastCaptionIndex = idx;
+            wrap.classList.remove("hidden");
+            textEl.textContent = formatTranscriptCueText(transcriptCues[idx]);
+        }
+
+        function updateCaptionsNow(force) {
+            if (!captionsEnabled) return;
+            if (!player || !player.getCurrentTime) {
+                updateCaptionsAtTime(0, true);
+                return;
+            }
+            updateCaptionsAtTime(player.getCurrentTime(), Boolean(force));
+        }
+
+        function setCaptionsEnabled(enabled) {
+            captionsEnabled = Boolean(enabled);
+            updateCaptionsToggleButton();
+
+            if (captionsTimer) {
+                clearInterval(captionsTimer);
+                captionsTimer = null;
+            }
+
+            if (!captionsEnabled) {
+                updateCaptionsAtTime(0, true);
+                return;
+            }
+
+            // Aggiorna spesso: l'effetto deve essere "sottotitolo".
+            captionsTimer = setInterval(() => {
+                if (!captionsEnabled) return;
+                if (!player || !player.getCurrentTime) return;
+                updateCaptionsAtTime(player.getCurrentTime(), false);
+            }, 200);
+
+            updateCaptionsNow(true);
+        }
+
+        function toggleCaptions() {
+            setCaptionsEnabled(!captionsEnabled);
+            setStatus(captionsEnabled ? "Sottotitoli attivi." : "Sottotitoli disattivati.");
+        }
+
+        function jumpToCurrentChapterStart() {
+            if (!player || !player.seekTo) {
+                setStatus("Player non pronto: attendi 2 secondi e riprova.");
+                return;
+            }
+            if (currentChapter) {
+                seekVideo(currentChapter.start, currentChapter.end);
+                return;
+            }
+            player.seekTo(0, true);
+            if (player.playVideo) player.playVideo();
+        }
+
+        function renderVideoNotesForChapter(ch) {
+            const hint = document.getElementById("videoNotesHint");
+            const list = document.getElementById("videoNotesList");
+            if (!hint || !list) return;
+
+            list.innerHTML = "";
+
+            if (!ch) {
+                hint.textContent = "Seleziona una tappa per vedere i commenti disponibili.";
+                return;
+            }
+
+            const items = Array.isArray(ch.videoBubbles) ? ch.videoBubbles.slice() : [];
+            items.sort((a, b) => (Number(a?.at) || 0) - (Number(b?.at) || 0));
+            if (!items.length) {
+                hint.textContent = "Per questa tappa non ci sono commenti. Se serve, usa il glossario (Lessico fondamentale).";
+                return;
+            }
+
+            hint.textContent = "Clicca una parola per mostrare il commento sopra il video.";
+
+            items.forEach(note => {
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "px-3 py-2 rounded-2xl bg-white border border-slate-200 hover:border-indigo-400 hover:shadow-sm transition text-xs font-black text-slate-800";
+
+                const label = note?.label ? String(note.label) : "Nota";
+                const t = (typeof note?.at === "number") ? formatTime(note.at) : "";
+                btn.textContent = t ? `${label} · ${t}` : label;
+
+                btn.addEventListener("click", () => showVideoNote(note, { pause: true }));
+                list.appendChild(btn);
+            });
+        }
+
+	        function showVideoNote(note, opts) {
+	            if (!note) return;
+	            const pause = opts && opts.pause === false ? false : true;
+
+	            lastVideoNote = note;
+	            if (pause && player && player.pauseVideo) player.pauseVideo();
+	            showVideoBubble(formatVideoNoteText(note));
+	        }
+
+        function hideVideoNote() {
+            lastVideoNote = null;
+            clearVideoBubble();
+        }
+
+	        function resumeVideo() {
+	            clearVideoBubble();
+	            if (player && player.playVideo) player.playVideo();
+	        }
+
+        function normalizeQuestions(ch) {
+            const raw = Array.isArray(ch?.pause?.questions) ? ch.pause.questions : [ch?.prompt].filter(Boolean);
+            return raw.map((q, idx) => {
+                if (typeof q === "string") {
+                    return { id: `q${idx + 1}`, text: q, required: true };
+                }
+
+                const id = q?.id || `q${idx + 1}`;
+                return {
+                    id,
+                    text: String(q?.text || ""),
+                    required: q?.required !== false,
+                    minChars: (typeof q?.minChars === "number") ? q.minChars : undefined,
+                    minWords: (typeof q?.minWords === "number") ? q.minWords : undefined,
+                    placeholder: q?.placeholder ? String(q.placeholder) : undefined,
+                    keywordsAny: Array.isArray(q?.keywordsAny) ? q.keywordsAny.map(String) : undefined
+                };
+            });
+        }
+
+        function countWords(text) {
+            return String(text || "").trim().split(/\s+/).filter(Boolean).length;
+        }
+
+        function detectMinWordsFromPrompt(promptText) {
+            const t = String(promptText || "");
+            const m = t.match(/(\d+)\s*parole/i);
+            if (!m) return null;
+            const n = Number.parseInt(m[1], 10);
+            return Number.isFinite(n) ? Math.max(1, n) : null;
+        }
+
+        function validateAnswer(ch, q, value) {
+            if (!q || q.required === false) return { complete: true, message: "" };
+
+            const text = String(value || "").trim();
+            if (!text) return { complete: false, message: "Scrivi una risposta (anche breve)." };
+
+            const minWordsAuto = detectMinWordsFromPrompt(q.text);
+            const minWords = (typeof q.minWords === "number") ? q.minWords : minWordsAuto;
+
+            // Default: breve, ma non “vuoto”.
+            let minChars = (typeof q.minChars === "number") ? q.minChars : 12;
+
+            // Se l'istruzione dice “1 frase”, chiediamo un po' più di sviluppo.
+            if (/(\d+)\s*frase/i.test(q.text) || /una\s+frase/i.test(q.text)) {
+                minChars = Math.max(minChars, 25);
+            }
+
+            if (minWords) {
+                const w = countWords(text);
+                if (w < minWords) return { complete: false, message: `Obiettivo: almeno ${minWords} parole.` };
+            } else if (text.length < minChars) {
+                return { complete: false, message: `Obiettivo: almeno ${minChars} caratteri.` };
+            }
+
+            // Suggerimento (non bloccante): usare parole chiave.
+            if (Array.isArray(q.keywordsAny) && q.keywordsAny.length) {
+                const lower = text.toLowerCase();
+                const ok = q.keywordsAny.some(k => lower.includes(String(k).toLowerCase()));
+                if (!ok) {
+                    return {
+                        complete: true,
+                        message: "Suggerimento: prova a usare una parola chiave del video (es. limiti, patinata, sradicare…).",
+                        hint: true
+                    };
+                }
+            }
+
+            return { complete: true, message: "OK." };
+        }
+
+        function isChapterComplete(ch) {
+            if (!ch || !ch.id) return false;
+            const qs = normalizeQuestions(ch).filter(q => q.required !== false);
+            if (!qs.length) return true;
+            return qs.every(q => validateAnswer(ch, q, getAnswer(ch.id, q.id)).complete);
+        }
+
+        function exportAnswersText() {
+            const lines = [];
+            lines.push("Le donne e lo sport italiano — Risposte");
+            try { lines.push(new Date().toLocaleString()); } catch (_) {}
+            lines.push("");
+
+            chapters.forEach((ch, idx) => {
+                const range = (ch.start != null && ch.end != null)
+                    ? `${formatTime(ch.start)}–${formatTime(ch.end)}`
+                    : `${formatTime(ch.start || 0)}`;
+
+                lines.push(`${idx + 1}. ${ch.title} (${range})`);
+                const qs = normalizeQuestions(ch);
+                qs.forEach(q => {
+                    lines.push(`- ${q.text}`);
+                    const a = getAnswer(ch.id, q.id).trim();
+                    lines.push(a ? `  ${a}` : "  [nessuna risposta]");
+                });
+                lines.push("");
+            });
+
+            return lines.join("\n");
+        }
+
+        function setExportStatus(text) {
+            const el = document.getElementById("exportStatus");
+            if (!el) return;
+            el.textContent = text || "";
+        }
+
+        function fallbackCopy(text) {
+            const ta = document.createElement("textarea");
+            ta.value = text;
+            ta.style.position = "fixed";
+            ta.style.left = "-9999px";
+            document.body.appendChild(ta);
+            ta.select();
+            try { document.execCommand("copy"); } catch (_) {}
+            document.body.removeChild(ta);
+        }
+
+        function copyAllAnswers() {
+            const text = exportAnswersText();
+            const done = () => setExportStatus("Copiato negli appunti.");
+
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).then(done).catch(() => {
+                    fallbackCopy(text);
+                    done();
+                });
+                return;
+            }
+
+            fallbackCopy(text);
+            done();
+        }
+
+        function downloadAllAnswers() {
+            const text = exportAnswersText();
+            try {
+                const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = "risposte-sport-parita.txt";
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => {
+                    URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                }, 0);
+                setExportStatus("Download avviato.");
+            } catch (_) {
+                setExportStatus("Download non disponibile su questo browser.");
+            }
+        }
+
+        function formatTime(totalSeconds) {
+            const s = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+            const m = Math.floor(s / 60);
+            const r = s % 60;
+            return String(m) + ":" + String(r).padStart(2, "0");
+        }
+
+        function scrollIntoViewIfNeeded(el, opts) {
+            if (!el || !el.getBoundingClientRect) return;
+            const rect = el.getBoundingClientRect();
+            const vh = window.innerHeight || document.documentElement.clientHeight || 0;
+            const margin = (opts && typeof opts.margin === "number") ? opts.margin : 16;
+            const block = (opts && opts.block) ? opts.block : "start";
+            const needsScroll = rect.top < margin || rect.bottom > (vh - margin);
+            if (!needsScroll) return;
+            try {
+                el.scrollIntoView({ behavior: "smooth", block });
+            } catch (_) {
+                el.scrollIntoView();
+            }
+        }
+
+        function animateOnce(el, className, durationMs) {
+            if (!el || !className) return;
+            try { el.classList.remove(className); } catch (_) {}
+            // Force reflow so the animation can replay.
+            void el.offsetWidth;
+            try { el.classList.add(className); } catch (_) {}
+            if (durationMs) {
+                setTimeout(() => {
+                    try { el.classList.remove(className); } catch (_) {}
+                }, durationMs);
+            }
+        }
+
+        function renderChapters() {
+            const list = document.getElementById("chaptersList");
+            const countEl = document.getElementById("chaptersCount");
+            if (!list) return;
+            const doneCount = chapters.filter(isChapterComplete).length;
+            if (countEl) countEl.textContent = `${doneCount}/${chapters.length} TAPPE`;
+
+            const wasDetailsOpen = Boolean(document.getElementById("allChaptersDetails")?.open);
+            const currentId = currentChapter?.id || null;
+
+            const renderCard = (ch) => {
+                const range = ch.end != null ? `${formatTime(ch.start)}–${formatTime(ch.end)}` : `${formatTime(ch.start)}`;
+                const isCurrent = Boolean(currentChapter && currentChapter.id === ch.id);
+                const isDone = isChapterComplete(ch);
+                const badge = isDone
+                    ? `<span class="text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-lg"><i class="fas fa-check mr-1"></i>Fatto</span>`
+                    : (isCurrent
+                        ? `<span class="text-[10px] font-black text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-1 rounded-lg">In corso</span>`
+                        : ``);
+
+                const cardClass = [
+                    "p-4 bg-white border rounded-2xl transition-all",
+                    isCurrent ? "border-indigo-400 shadow-md ring-2 ring-indigo-200" : "border-slate-200 hover:border-indigo-400 hover:shadow-md",
+                    isDone ? "opacity-95" : ""
+                ].join(" ");
+
+                return `
+                    <div class="${cardClass}">
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="flex items-start gap-3">
+                                <div class="w-10 h-10 bg-indigo-100 text-indigo-700 rounded-xl flex items-center justify-center border border-indigo-100 shrink-0">
+                                    <i class="fas ${ch.icon}"></i>
+                                </div>
+                                <div>
+                                    <div class="font-black text-slate-900 flex items-center gap-2">${range} · ${ch.title} ${badge}</div>
+                                    <div class="text-sm text-slate-600">${ch.summary}</div>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="tooltip">
+                                    <button type="button" class="tooltip-btn" aria-label="Info">i</button>
+                                    <span class="tooltip-content" role="tooltip">${ch.bubble}</span>
+                                </span>
+                                <button type="button" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm shadow-sm" onclick="playChapter('${ch.id}')">Vai</button>
+                            </div>
+                        </div>
+	                        <div class="mt-3 text-xs text-slate-500">
+	                            <i class="fas fa-circle-question mr-1"></i>Domande: alla fine della tappa (pausa guidata).
+	                        </div>
+	                    </div>
+	                `;
+            };
+
+            if (!currentId) {
+                list.innerHTML = chapters.map(renderCard).join("");
+                return;
+            }
+
+            const current = chapters.find(c => c.id === currentId) || chapters[0];
+            const others = chapters.filter(c => c.id !== current.id);
+
+            const otherCount = others.length;
+            const details = otherCount
+                ? `
+                    <details id="allChaptersDetails" class="mt-2 p-3 bg-slate-50 border border-slate-200 rounded-2xl">
+                        <summary class="cursor-pointer font-black text-slate-800 flex items-center justify-between gap-3">
+                            <span><i class="fas fa-list-ul text-slate-500 mr-2"></i>Tutte le tappe</span>
+                            <span class="text-[10px] font-black text-slate-500 bg-white border border-slate-200 px-2 py-1 rounded-lg">${otherCount} altre</span>
+                        </summary>
+                        <div class="space-y-3 mt-3">
+                            ${others.map(renderCard).join("")}
+                        </div>
+                    </details>
+                `
+                : "";
+
+            list.innerHTML = `
+                ${renderCard(current)}
+                ${details}
+            `;
+
+            // Mantieni lo stato di apertura se l'utente stava esplorando l'elenco.
+            const d = document.getElementById("allChaptersDetails");
+            if (d) d.open = wasDetailsOpen;
+        }
+
+        function setStatus(text) {
+            const el = document.getElementById("statusLine");
+            if (!el) return;
+            el.textContent = text || "";
+        }
+
+        function openIntroModal() {
+            const m = document.getElementById("introModal");
+            if (!m) return;
+            m.classList.remove("hidden");
+        }
+
+        function closeIntroModal() {
+            const m = document.getElementById("introModal");
+            if (m) m.classList.add("hidden");
+            const dontShow = document.getElementById("introDontShow");
+            const shouldRemember = !dontShow || Boolean(dontShow.checked);
+            if (!shouldRemember) return;
+            try { localStorage.setItem(INTRO_SEEN_KEY, String(Date.now())); } catch (_) {}
+        }
+
+        function introWatchOnce() {
+            closeIntroModal();
+            playFullVideo();
+        }
+
+        function introStartActivity() {
+            closeIntroModal();
+            startGuided();
+        }
+
+        function setChapterPrompt(text) {
+            const el = document.getElementById("chapterPrompt");
+            if (!el) return;
+            el.textContent = text || "";
+            if (el.animate) {
+                el.animate([{ opacity: 0.5 }, { opacity: 1 }], { duration: 250, easing: "ease-out" });
+            }
+        }
+
+        function playChapter(id) {
+            const ch = chapters.find(c => c.id === id);
+            if (!ch) return;
+
+            setChapterPrompt(ch.prompt);
+            setCurrentChapter(ch);
+            renderChapters();
+            const details = document.getElementById("allChaptersDetails");
+            if (details) details.open = false;
+
+            if (!player || !player.seekTo) {
+                setStatus("Player non pronto: attendi 2 secondi e riprova (oppure ricarica la pagina).");
+                return;
+            }
+
+            setStatus("");
+            seekVideo(ch.start, ch.end);
+        }
+
+        function startGuided() {
+            if (!chapters.length) return;
+            const next = chapters.find(ch => !isChapterComplete(ch)) || chapters[0];
+            playChapter(next.id);
+        }
+
+	        function pauseNow() {
+	            if (!currentChapter) {
+	                setStatus("Seleziona una tappa e clicca “Vai”, poi usa “Pausa + domande”.");
+	                return;
+	            }
+	            if (player && player.pauseVideo) player.pauseVideo();
+	            pauseMode = "manual";
+	            clearVideoBubble();
+	            showPausePanelForChapter(currentChapter);
+	            setStatus("Pausa manuale: rispondi alle domande, poi riprendi la tappa.");
+	        }
+
+        function playNextChapter() {
+            if (!chapters.length) return;
+
+            if (!currentChapter) {
+                startGuided();
+                return;
+            }
+
+            const idx = chapters.findIndex(c => c.id === currentChapter.id);
+            const next = idx >= 0 ? chapters[idx + 1] : null;
+
+            if (!next) {
+                hidePausePanel();
+                setStatus("Percorso completato. Ora puoi fare il quiz (a destra) o riascoltare una tappa.");
+                return;
+            }
+
+            playChapter(next.id);
+        }
+
+        function updatePausePanelState(ch) {
+            const progressEl = document.getElementById("pauseProgress");
+            const primaryBtn = document.getElementById("pausePrimaryBtn");
+            const primaryBtnBottom = document.getElementById("pausePrimaryBtnBottom");
+            if (!progressEl || !primaryBtn || !ch) return;
+
+            const qs = normalizeQuestions(ch).filter(q => q.required !== false);
+            const total = qs.length;
+            const done = qs.reduce((n, q) => {
+                const res = validateAnswer(ch, q, getAnswer(ch.id, q.id));
+                return n + (res.complete ? 1 : 0);
+            }, 0);
+            const allDone = total ? (done >= total) : true;
+
+            if (!total) {
+                progressEl.textContent = "—";
+            } else if (done >= total) {
+                progressEl.textContent = `Risposte: ${done}/${total} complete — puoi continuare.`;
+            } else {
+                progressEl.textContent = `Risposte: ${done}/${total} complete — completa per continuare.`;
+            }
+
+            progressEl.classList.remove("text-slate-500", "text-amber-700", "text-emerald-700");
+            if (allDone && total) {
+                progressEl.classList.add("text-emerald-700");
+            } else if (pauseMode === "end" && total) {
+                progressEl.classList.add("text-amber-700");
+            } else {
+                progressEl.classList.add("text-slate-500");
+            }
+
+            if (pauseMode === "manual") {
+                primaryBtn.textContent = "Riprendi tappa";
+                primaryBtn.disabled = false;
+                if (primaryBtnBottom) {
+                    primaryBtnBottom.textContent = "Riprendi tappa";
+                    primaryBtnBottom.disabled = false;
+                }
+                return;
+            }
+
+            primaryBtn.textContent = "Tappa successiva";
+            primaryBtn.disabled = total ? (done < total) : false;
+            if (primaryBtnBottom) {
+                primaryBtnBottom.textContent = "Tappa successiva";
+                primaryBtnBottom.disabled = total ? (done < total) : false;
+            }
+
+            if (pauseMode === "end" && total && allDone && !pauseAllDone) {
+                pauseAllDone = true;
+                animateOnce(primaryBtn, "attention-wiggle", 520);
+                if (primaryBtnBottom) animateOnce(primaryBtnBottom, "attention-wiggle", 520);
+                setStatus("Ottimo! Ora puoi passare alla tappa successiva.");
+            }
+        }
+
+	        function pausePrimaryAction() {
+	            if (!currentChapter) return;
+
+	            if (pauseMode === "manual") {
+	                hidePausePanel();
+	                setStatus("");
+	                if (player && player.playVideo) player.playVideo();
+	                return;
+	            }
+
+            if (!isChapterComplete(currentChapter)) {
+                setStatus("Completa le risposte per continuare.");
+                updatePausePanelState(currentChapter);
+                return;
+            }
+
+	            hidePausePanel();
+	            setStatus("");
+	            playNextChapter();
+	        }
+
+        function setCurrentChapter(ch) {
+            currentChapter = ch || null;
+            hidePausePanel();
+            clearVideoBubble();
+            lastVideoNote = null;
+            renderVideoNotesForChapter(currentChapter);
+            const promptBox = document.getElementById("chapterPromptBox");
+            if (promptBox) promptBox.classList.toggle("hidden", Boolean(currentChapter));
+
+            const items = Array.isArray(ch?.videoBubbles) ? ch.videoBubbles.slice() : [];
+            items.sort((a, b) => (Number(a.at) || 0) - (Number(b.at) || 0));
+            videoBubbleItems = items;
+            videoBubbleShown = new Array(items.length).fill(false);
+            videoBubbleVisibleIndex = null;
+        }
+
+	        function seekVideo(startSeconds, endSeconds) {
+	            if (!player || !player.seekTo) return;
+
+	            const start = Math.max(0, Number(startSeconds) || 0);
+	            const end = endSeconds == null ? null : Math.max(0, Number(endSeconds) || 0);
+
+            if (chapterStopTimer) {
+                clearInterval(chapterStopTimer);
+                chapterStopTimer = null;
+            }
+
+            player.seekTo(start, true);
+            player.playVideo();
+
+            const iframe = document.getElementById("video-player");
+            if (iframe) {
+                const shouldScroll = (window.matchMedia ? window.matchMedia("(max-width: 1023px)").matches : true);
+                if (shouldScroll) iframe.scrollIntoView({ behavior: "smooth", block: "center" });
+            }
+
+            if (end != null && end > start) {
+                chapterStopTimer = setInterval(() => {
+                    if (!player || !player.getCurrentTime) return;
+                    const t = player.getCurrentTime();
+                    maybeShowVideoBubbleAtTime(t);
+	                    if (t >= (end - 0.15)) {
+	                        player.pauseVideo();
+	                        clearInterval(chapterStopTimer);
+	                        chapterStopTimer = null;
+	                        renderChapters();
+	                        pauseMode = "end";
+	                        setStatus("Segmento terminato: rispondi alle domande per sbloccare la tappa successiva.");
+	                        clearVideoBubble();
+	                        const vw = document.querySelector(".video-wrapper");
+	                        if (vw) animateOnce(vw, "video-ring-on", 950);
+	                        showPausePanelForChapter(currentChapter);
+	                    }
+	                }, 250);
+	            }
+	        }
+
+        function playFullVideo() {
+            if (!player || !player.seekTo) {
+                setStatus("Player non pronto: attendi 2 secondi e riprova.");
+                return;
+            }
+
+            // Visione libera: nessuna pausa automatica tra le tappe.
+            if (chapterStopTimer) {
+                clearInterval(chapterStopTimer);
+                chapterStopTimer = null;
+            }
+	            pauseMode = "manual";
+	            hidePausePanel();
+	            clearVideoBubble();
+	            setCurrentChapter(null);
+	            renderChapters();
+
+            setStatus("Visione libera: guarda tutto il video. Poi clicca “Inizia (prima tappa)”.");
+            player.seekTo(0, true);
+            player.playVideo();
+        }
+
+        function maybeShowVideoBubbleAtTime(currentTimeSeconds) {
+            // Commenti nella video: ora sono "a richiesta". (Modalita' automatica disattivata)
+            return;
+        }
+
+        function showVideoBubble(text) {
+            const el = document.getElementById("videoBubble");
+            const tx = document.getElementById("videoBubbleText");
+            if (!el || !tx) return;
+            tx.textContent = String(text || "");
+            el.classList.remove("hidden");
+            el.style.animation = "fadeIn 0.25s ease-out";
+        }
+
+	        function clearVideoBubble() {
+	            const el = document.getElementById("videoBubble");
+	            const tx = document.getElementById("videoBubbleText");
+	            if (tx) tx.textContent = "";
+            if (el) el.classList.add("hidden");
+        }
+
+	        function showPausePanelForChapter(ch) {
+	            const panel = document.getElementById("pausePanel");
+            const title = document.getElementById("pauseTitle");
+            const time = document.getElementById("pauseTime");
+            const primaryBtn = document.getElementById("pausePrimaryBtn");
+            const promptWrap = document.getElementById("pausePromptWrap");
+            const promptEl = document.getElementById("pausePrompt");
+            const transcriptWrap = document.getElementById("pauseTranscriptWrap");
+            const transcriptEl = document.getElementById("pauseTranscript");
+            const questions = document.getElementById("pauseQuestions");
+            const supports = document.getElementById("pauseSupports");
+
+            if (!panel || !title || !time || !primaryBtn || !promptWrap || !promptEl || !transcriptWrap || !transcriptEl || !questions || !supports) return;
+            if (!ch) return;
+
+            pauseAllDone = isChapterComplete(ch);
+            title.textContent = ch.title || "Pausa";
+            time.textContent = (ch.start != null && ch.end != null)
+                ? `Da ${formatTime(ch.start)} a ${formatTime(ch.end)}`
+                : "—";
+
+            // Prompt (sempre: la domanda guida della tappa)
+            const pr = ch?.prompt;
+            if (pr) {
+                promptWrap.classList.remove("hidden");
+                promptEl.textContent = String(pr);
+            } else {
+                promptWrap.classList.add("hidden");
+                promptEl.textContent = "";
+            }
+
+            // Transcript (optional)
+            const tr = ch?.pause?.transcript;
+            if (tr) {
+                transcriptWrap.classList.remove("hidden");
+                transcriptEl.textContent = String(tr);
+            } else {
+                transcriptWrap.classList.add("hidden");
+                transcriptEl.textContent = "";
+            }
+
+            // Questions
+            const qs = normalizeQuestions(ch);
+            questions.innerHTML = "";
+            qs.forEach((q, idx) => {
+                const block = document.createElement("div");
+                block.className = "p-4 bg-slate-50 border border-slate-200 rounded-2xl";
+
+                const top = document.createElement("div");
+                top.className = "flex items-start justify-between gap-3";
+
+                const qText = document.createElement("div");
+                qText.className = "text-sm font-black text-slate-800 leading-snug";
+                qText.textContent = String(q.text || "");
+
+                const badge = document.createElement("span");
+                badge.className = "shrink-0 text-[10px] font-black px-2 py-1 rounded-lg border";
+                badge.textContent = "Da fare";
+                badge.style.backgroundColor = "#ffffff";
+                badge.style.borderColor = "#e2e8f0";
+                badge.style.color = "#64748b";
+
+                top.appendChild(qText);
+                top.appendChild(badge);
+
+                const textarea = document.createElement("textarea");
+                textarea.className = "mt-3 w-full bg-white border border-slate-200 rounded-2xl p-3 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400";
+                textarea.rows = 3;
+                textarea.placeholder = q.placeholder || "Scrivi qui…";
+                textarea.value = getAnswer(ch.id, q.id);
+                textarea.setAttribute("data-chapter", ch.id);
+                textarea.setAttribute("data-question", q.id);
+                textarea.setAttribute("aria-label", `Risposta ${idx + 1}`);
+
+                const feedback = document.createElement("div");
+                feedback.className = "mt-2 text-xs";
+
+                const applyValidation = () => {
+                    const res = validateAnswer(ch, q, textarea.value);
+                    if (!res.complete) {
+                        badge.textContent = "Da fare";
+                        badge.style.backgroundColor = "#ffffff";
+                        badge.style.borderColor = "#e2e8f0";
+                        badge.style.color = "#64748b";
+                        feedback.style.color = "#7a4a00";
+                        feedback.textContent = res.message || "";
+                        return;
+                    }
+
+                    badge.textContent = "OK";
+                    if (res.hint) {
+                        badge.style.backgroundColor = "#fef7e0";
+                        badge.style.borderColor = "#fde293";
+                        badge.style.color = "#7a4a00";
+                        feedback.style.color = "#334155";
+                        feedback.textContent = res.message || "";
+                        return;
+                    }
+
+                    badge.style.backgroundColor = "#e6f4ea";
+                    badge.style.borderColor = "#ceead6";
+                    badge.style.color = "#0d652d";
+                    feedback.textContent = "";
+                };
+
+                textarea.addEventListener("input", () => {
+                    setAnswer(ch.id, q.id, textarea.value);
+                    applyValidation();
+                    updatePausePanelState(ch);
+                    renderChapters();
+                });
+
+                applyValidation();
+
+                block.appendChild(top);
+                block.appendChild(textarea);
+                block.appendChild(feedback);
+                questions.appendChild(block);
+            });
+
+            // Supports (optional)
+            supports.innerHTML = "";
+            const ss = Array.isArray(ch?.pause?.supports) ? ch.pause.supports : [];
+            ss.forEach(s => {
+                const details = document.createElement("details");
+                details.className = "group p-4 bg-white border border-slate-200 rounded-2xl";
+
+                const summary = document.createElement("summary");
+                summary.className = "cursor-pointer font-black text-slate-800";
+                summary.textContent = String(s?.title || "Aiuto");
+
+                const body = document.createElement("div");
+                body.className = "mt-2 text-sm text-slate-700 whitespace-pre-wrap leading-relaxed";
+                body.textContent = String(s?.body || "");
+
+                details.appendChild(summary);
+                details.appendChild(body);
+                supports.appendChild(details);
+            });
+
+            // Supporto "sempre disponibile" (anche quando non c'e' una trascrizione specifica).
+            const always = document.createElement("details");
+            always.className = "group p-4 bg-slate-50 border border-slate-200 rounded-2xl";
+            const alwaysSum = document.createElement("summary");
+            alwaysSum.className = "cursor-pointer font-black text-slate-800";
+            alwaysSum.textContent = "Aiuto (sempre) — Metodo rapido";
+            const alwaysBody = document.createElement("div");
+            alwaysBody.className = "mt-2 text-sm text-slate-700 whitespace-pre-wrap leading-relaxed";
+            alwaysBody.textContent =
+`1) Riascolta la tappa una volta.
+2) Scrivi 3 parole chiave.
+3) Rispondi con una frase: “In questo pezzo si dice che…”.
+
+Se ti manca una parola: usa il glossario qui sotto (Lessico fondamentale).`;
+            always.appendChild(alwaysSum);
+            always.appendChild(alwaysBody);
+            supports.appendChild(always);
+
+	            // Aggiorna bottone + progress (dipende dal tipo di pausa).
+	            updatePausePanelState(ch);
+
+	            panel.classList.remove("hidden");
+	            panel.classList.add("pause-float");
+	            const details = document.getElementById("allChaptersDetails");
+	            if (details) details.open = false;
+	            if (pauseMode === "end") animateOnce(panel, "attention-bounce", 720);
+
+	            // Ergonomia: porta subito il focus sulla prima risposta.
+	            setTimeout(() => {
+                const first = questions.querySelector("textarea");
+                if (!first) return;
+                try { first.focus({ preventScroll: true }); } catch (_) { first.focus(); }
+            }, 0);
+        }
+
+	        function hidePausePanel() {
+	            const panel = document.getElementById("pausePanel");
+	            if (!panel) return;
+	            panel.classList.add("hidden");
+	            panel.classList.remove("pause-float");
+	        }
+
+	        function replayCurrentChapter() {
+	            if (!currentChapter) return;
+	            hidePausePanel();
+	            setStatus("");
+	            // Reset bubbles + pause state for a clean replay.
+	            const ch = currentChapter;
+	            setCurrentChapter(ch);
+	            seekVideo(ch.start, ch.end);
+	        }
+
+        // YouTube Iframe API
+        function onYouTubeIframeAPIReady() {
+            player = new YT.Player("video-player", { events: { onReady: onPlayerReady } });
+        }
+
+        function onPlayerReady() {
+            setStatus("Player pronto. Suggerimento: clicca una tappa e rispondi alla pausa guidata.");
+            updateCaptionsNow(true);
+        }
+
+        function loadYouTubeApi() {
+            if (window.YT && window.YT.Player) return;
+            const tag = document.createElement("script");
+            tag.src = "https://www.youtube.com/iframe_api";
+            document.head.appendChild(tag);
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            // Aggiunge origin al player (aiuta l'API su alcuni browser).
+            const iframe = document.getElementById("video-player");
+            if (iframe && iframe.src) {
+                try {
+                    const url = new URL(iframe.src);
+                    if (!url.searchParams.get("origin")) {
+                        url.searchParams.set("origin", window.location.origin);
+                        iframe.src = url.toString();
+                    }
+                } catch (_) {}
+            }
+
+            setStatus("Caricamento del player…");
+            updateVideoNotesLangButtons();
+            updateCaptionsToggleButton();
+            renderVideoNotesForChapter(null);
+            renderChapters();
+            loadYouTubeApi();
+
+            // Guida iniziale (una sola volta per dispositivo).
+            let seen = false;
+            try { seen = Boolean(localStorage.getItem(INTRO_SEEN_KEY)); } catch (_) {}
+            if (!seen) openIntroModal();
+        });
+
+        /* -------------------------------
+           3) Quiz comprensione
+        --------------------------------- */
+        const quizData = [
+            {
+                q: "Quale muro ha abbattuto Alfonsina Strada nel 1924?",
+                options: ["Il divieto per le donne di nuotare", "L'accesso delle donne alle gare di ciclismo", "La partecipazione femminile allo sci"],
+                correct: 1,
+                feedback: "Esatto! Alfonsina Strada è stata la pioniera del ciclismo femminile partecipando al Giro d'Italia."
+            },
+            {
+                q: "Cosa dice la legge del 1981 sulle atlete in TV?",
+                options: ["Che sono professioniste", "Che restano dilettanti senza tutele", "Che devono gareggiare solo con uomini"],
+                correct: 1,
+                feedback: "Corretto. Per molto tempo le donne sono state considerate solo dilettanti, nonostante i successi."
+            },
+            {
+                q: "Cosa ha permesso di ottenere una 'vittoria epocale' recentemente?",
+                options: ["Un fondo per la maternità", "Più ore di allenamento", "Nuove divise sportive"],
+                correct: 0,
+                feedback: "Esatto! Il riconoscimento di un fondo per la maternità è un passo storico verso la parità."
+            },
+            {
+                q: "Secondo la conclusione del video, quali sono gli unici limiti “insuperabili”?",
+                options: ["Quelli fisici del corpo", "Quelli che abbiamo dentro di noi", "Quelli imposti dagli arbitri"],
+                correct: 1,
+                feedback: "Esatto: il video dice che i limiti più difficili da superare sono spesso quelli interiori (paure, convinzioni)."
+            }
+        ];
+
+        function startQuiz() {
+            renderQuestion();
+        }
+
+        function renderQuestion() {
+            const area = document.getElementById('quizArea');
+            if (!area) return;
+
+            if (currentQuizIndex >= quizData.length) {
+                area.innerHTML = `
+                    <div class="text-center p-6 bg-emerald-50 rounded-2xl border border-emerald-100">
+                        <i class="fas fa-check-double text-emerald-500 text-3xl mb-3"></i>
+                        <p class="font-black text-emerald-900">Eccellente! Percorso completato.</p>
+                        <p class="text-xs text-emerald-700 mt-1">Hai dimostrato un'ottima comprensione.</p>
+                    </div>`;
+                return;
+            }
+
+            const data = quizData[currentQuizIndex];
+            let html = `<div class="p-1"><p class="text-sm font-bold text-slate-800 mb-4">${data.q}</p>`;
+            data.options.forEach((opt, i) => {
+                html += `<button onclick="checkAnswer(${i})" class="w-full mb-3 p-4 text-left border border-slate-200 rounded-2xl hover:bg-white hover:border-indigo-400 hover:shadow-md transition-all text-sm group flex items-center justify-between">
+                            <span>${opt}</span>
+                            <i class="fas fa-chevron-right text-slate-300 group-hover:text-indigo-500 transition-colors"></i>
+                         </button>`;
+            });
+            html += `</div>`;
+            area.innerHTML = html;
+        }
+
+        function checkAnswer(index) {
+            const data = quizData[currentQuizIndex];
+            if (index === data.correct) {
+                score += 20;
+                showModal(true, data.feedback);
+                currentQuizIndex++;
+            } else {
+                showModal(false, "Non è la risposta corretta. Riguarda il passaggio del video sulla storia o sulla legge del 1981!");
+            }
+            const scoreEl = document.getElementById('scoreDisplay');
+            if (scoreEl) scoreEl.textContent = score;
+        }
+
+        function showModal(success, text) {
+            const m = document.getElementById('modal');
+            const icon = document.getElementById('modalIcon');
+            const title = document.getElementById('modalTitle');
+            const desc = document.getElementById('modalText');
+
+            if (!m || !icon || !title || !desc) return;
+
+            m.classList.remove('hidden');
+            if (success) {
+                icon.innerHTML = '🎉';
+                title.textContent = "Ottimo lavoro!";
+                title.className = "text-2xl font-black mb-3 text-emerald-600";
+            } else {
+                icon.innerHTML = '🧐';
+                title.textContent = "Quasi...";
+                title.className = "text-2xl font-black mb-3 text-amber-600";
+            }
+            desc.textContent = text;
+        }
+
+        function closeModal() {
+            const m = document.getElementById('modal');
+            if (m) m.classList.add('hidden');
+            renderQuestion();
+        }
+    </script>
+</body>
+</html>
